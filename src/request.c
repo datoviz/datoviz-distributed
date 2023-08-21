@@ -866,6 +866,13 @@ void dvz_requester_destroy(DvzRequester* rqr)
 
 void dvz_requester_begin(DvzRequester* rqr)
 {
+    /*
+    Status lifecycle: CLEAR -> BUSY -> DIRTY -> CLEAR
+    - CLEAR (create): queue is empty
+    - BUSY (begin): requests are being added in the queue and the queue shouldn't be flushed yet
+    - DIRTY (end): requests are no longer being added in the queue and it can be flushed
+    - CLEAR (flush): await start of new batch
+    */
     ANN(rqr);
     log_trace("begin requester");
     rqr->count = 0;
@@ -877,6 +884,15 @@ void dvz_requester_begin(DvzRequester* rqr)
 void dvz_requester_add(DvzRequester* rqr, DvzRequest req)
 {
     ANN(rqr);
+
+    // Check the requester's status.
+    int status = dvz_atomic_get(rqr->status);
+    if (status != (int)DVZ_BUILD_BUSY)
+    {
+        log_warn("unable to add a request to the requester with status %d", status);
+        return;
+    }
+
     // Resize the array if needed.
     if (rqr->count == rqr->capacity)
     {
@@ -894,7 +910,21 @@ void dvz_requester_add(DvzRequester* rqr, DvzRequest req)
 DvzRequest* dvz_requester_end(DvzRequester* rqr, uint32_t* count)
 {
     ANN(rqr);
-    log_trace("end requester");
+    if (rqr->count == 0)
+    {
+        log_trace("end requester with empty queue");
+        return NULL;
+    }
+
+    // Check the requester's status.
+    int status = dvz_atomic_get(rqr->status);
+    if (status != (int)DVZ_BUILD_BUSY)
+    {
+        log_warn("unable to end the requester with status %d", status);
+        return NULL;
+    }
+
+    log_trace("end requester with %d requests", rqr->count);
     if (count != NULL)
         *count = rqr->count;
     dvz_atomic_set(rqr->status, (int)DVZ_BUILD_DIRTY);
@@ -1033,6 +1063,15 @@ DvzRequest* dvz_requester_flush(DvzRequester* rqr, uint32_t* count)
         log_error("cannot flush requester as dvz_requester_begin() was not called");
         return NULL;
     }
+
+    // Check the requester's status.
+    int status = dvz_atomic_get(rqr->status);
+    if (status != (int)DVZ_BUILD_DIRTY)
+    {
+        log_warn("unable to flush the requester with status %d", status);
+        return NULL;
+    }
+
     uint32_t n = rqr->count;
 
     // Modify the count pointer to the number of returned requests.
