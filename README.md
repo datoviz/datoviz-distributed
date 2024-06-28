@@ -1,11 +1,1 @@
-# datoviz-distributed
-
-Experiments on a possible distributed version of Datoviz.
-
-## Build
-
-Ubuntu 24.04 notes:
-
-* `sudo apt install build-essential cmake gcc ninja-build xorg-dev clang-format libtinyxml2-dev libfreetype-dev`
-* `./manage.sh build` [NOTE: currently you need to run this command twice, fix upcoming..]
-
+This repository is deprecated. [The code for the upcoming v0.2x branch of Datoviz is now found in the main repo.](https://github.com/datoviz/datoviz/tree/v0.2x)
